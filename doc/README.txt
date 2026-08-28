@@ -564,5 +564,28 @@ to float (double).
 
 Copyright (c) 2005-2008  Mats Bengtsson
 
+The tkp::loupe function.
+
+This function allows you to take a screenshot of any area of ​​the screen and,
+if desired, zoom in on it. Hence the name of the loupe function:
+
+tkp::loupe <image ID> <x> <y> <w> <h> [<zoom>], 
+
+where the <image ID> field contains the ID of the image created by the command:
+
+image create photo [–width <width> -height <height>] [image ID]
+
+The x and y coordinates define the center of the area being captured 
+(I emphasize, the CENTER), w is the width of the area, and 
+h is the height of the area being captured.
+
+You can read about this package here:
+
+https://wiki.tcl-lang.org/page/SVG+widgets
+
+You can also find a demo of SVG widgets there:
+
+https://cloudtk-app.tcl-lang.org/cloudtk/VNC?session=new&Tk=SVG-widgets-Part-I
+
 BSD style license.
 

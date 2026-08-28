@@ -1,6 +1,7 @@
 NOTE: This is a fork of Mats Bengtsson's original tkpath extension
 for Tcl/Tk 8, with modifications by Steve Shaw (sm-shaw at github) and
-further fixes for Tcl/Tk 9.
+further fixes for Tcl/Tk 9. Vladimir Orlov (a513 at github) added the loupe function to
+capture an image of a specified area of ​​the screen.
 
                            README for tkpath
                            _________________
@@ -53,5 +54,7 @@ There are a number of design choices that I'd like to discuss.
    options be?
 
 Copyright (c) 2005-2008  Mats Bengtsson
+
+
 
 BSD style license.

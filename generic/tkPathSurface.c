@@ -11,6 +11,11 @@
 #include "tkIntPath.h"
 #include "tkPathStyle.h"
 #include "tkCanvArrow.h"
+/*ORLOV*/
+#include <stdarg.h>
+#ifdef WIN32
+#include <window.h>
+#endif
 
 typedef struct {
     Tcl_HashTable	surfaceHash;
@@ -38,6 +43,11 @@ typedef struct PathSurface {
 
 static void	StaticSurfaceEventProc(ClientData clientData, XEvent *eventPtr);
 static void	StaticSurfaceObjCmdDeleted(ClientData clientData);
+/*ORLOV*/
+static int	LoupeCmd(ClientData clientData,
+				    Tcl_Interp *interp,
+				    int objc, Tcl_Obj* const objv[]);
+
 static int 	StaticSurfaceObjCmd(ClientData clientData,
 				    Tcl_Interp *interp,
 				    int objc, Tcl_Obj* const objv[]);
@@ -1338,7 +1348,11 @@ SurfaceInit(Tcl_Interp *interp)
     Tcl_CreateObjCommand(interp, "::tkp::surface",
 			 StaticSurfaceObjCmd, (ClientData) dataPtr,
 			 (Tcl_CmdDeleteProc *) StaticSurfaceObjCmdDeleted);
-    return TCL_OK;
+/*ORLOV*/
+    /* Screen magnifier to check those dotted lines. */
+    Tcl_CreateObjCommand(interp, "::tkp::loupe", LoupeCmd, NULL, NULL);
+
+	return TCL_OK;
 }
 
 /*
@@ -1349,3 +1363,420 @@ SurfaceInit(Tcl_Interp *interp)
  * tab-width: 8
  * End:
  */
+/*ORLOV*/
+/*
+ * TIP #116 altered Tk_PhotoPutBlock API to add interp arg.
+ * We need to remove that for compiling with 8.4.
+ */
+#if (TK_MAJOR_VERSION == 8) && (TK_MINOR_VERSION < 5)
+#define TK_PHOTOPUTBLOCK(interp, hdl, blk, x, y, w, h, cr) \
+		Tk_PhotoPutBlock(hdl, blk, x, y, w, h, cr)
+#define TK_PHOTOPUTZOOMEDBLOCK(interp, hdl, blk, x, y, w, h, \
+				zx, zy, sx, sy, cr) \
+		Tk_PhotoPutZoomedBlock(hdl, blk, x, y, w, h, \
+				zx, zy, sx, sy, cr)
+#else
+#define TK_PHOTOPUTBLOCK	Tk_PhotoPutBlock
+#define TK_PHOTOPUTZOOMEDBLOCK	Tk_PhotoPutZoomedBlock
+#endif
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * FormatResult --
+ *
+ *	Set the interpreter's result to a formatted string.
+ *
+ * Results:
+ *	None.
+ *
+ * Side effects:
+ *	Interpreter's result is modified.
+ *
+ *----------------------------------------------------------------------
+ */
+
+void
+FormatResult(
+    Tcl_Interp *interp,		/* Current interpreter. */
+    char *fmt, ...		/* Format string and varargs. */
+    )
+{
+    va_list ap;
+    char buf[256];
+
+    va_start(ap, fmt);
+    vsprintf(buf, fmt, ap);
+    va_end(ap);
+    Tcl_SetResult(interp, buf, TCL_VOLATILE);
+}
+
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 4
+ * fill-column: 78
+ * tab-width: 8
+ * End:
+ */
+/*
+ *--------------------------------------------------------------
+ *
+ * LoupeCmd --
+ *
+ *	This procedure is invoked to process the [loupe] Tcl
+ *	command. The command is used to perform a screen grab on the
+ *	root window and place a magnified version of the screen grab
+ *	into an existing photo image. The command is used to check those
+ *	dotted lines and make sure they line up properly.
+ *
+ * Results:
+ *	A standard Tcl result.
+ *
+ * Side effects:
+ *	A photo image is modified.
+ *
+ *--------------------------------------------------------------
+ */
+
+static int
+LoupeCmd(
+    ClientData clientData,	/* Not used. */
+    Tcl_Interp *interp,		/* Current interpreter. */
+    int objc,			/* Number of arguments. */
+    Tcl_Obj *const objv[]	/* Argument values. */
+    )
+{
+    Tk_Window tkwin = Tk_MainWindow(interp);
+    Display *display = Tk_Display(tkwin);
+    int screenNum = Tk_ScreenNumber(tkwin);
+    int displayW = DisplayWidth(display, screenNum);
+    int displayH = DisplayHeight(display, screenNum);
+    char *imageName;
+    Tk_PhotoHandle photoH;
+    Tk_PhotoImageBlock photoBlock;
+    unsigned char *pixelPtr;
+    int x, y, w, h, zoom;
+    int grabX, grabY, grabW, grabH;
+    int minx = 0, miny = 0;
+#ifdef WIN32
+    int xx, yy;
+    HWND hwnd;
+    HDC hdc;
+#define WIN7
+#ifdef WIN7
+    HDC hdcCopy;
+    HBITMAP hBitmap, hBitmapSave;
+#endif /* WIN7 */
+#elif defined(MAC_OSX_TK)
+#else
+    Visual *visual = Tk_Visual(tkwin);
+    Window rootWindow = RootWindow(display, screenNum);
+    XImage *ximage;
+    XColor *xcolors;
+    unsigned long red_shift, green_shift, blue_shift;
+    int i, ncolors;
+    int separated = 0;
+#endif
+
+    /*
+     * x && y are points on screen to snap from
+     * w && h are size of image to grab (default to image size)
+     * zoom is the integer zoom factor to grab
+     */
+    if ((objc != 4) && (objc != 6) && (objc != 7)) {
+	Tcl_WrongNumArgs(interp, 1, objv, "imageName x y ?w h? ?zoom?");
+	return TCL_ERROR;
+    }
+
+    imageName = Tcl_GetStringFromObj(objv[1], NULL);
+    photoH = Tk_FindPhoto(interp, imageName);
+    if (photoH == NULL) {
+	Tcl_AppendResult(interp, "image \"", imageName,
+		"\" doesn't exist or is not a photo image",
+		(char *) NULL);
+	return TCL_ERROR;
+    }
+
+    if ((Tcl_GetIntFromObj(interp, objv[2], &x) != TCL_OK)
+	    || (Tcl_GetIntFromObj(interp, objv[3], &y) != TCL_OK)) {
+	return TCL_ERROR;
+    }
+    if (objc >= 6) {
+	if ((Tcl_GetIntFromObj(interp, objv[4], &w) != TCL_OK)
+		|| (Tcl_GetIntFromObj(interp, objv[5], &h) != TCL_OK)) {
+	    return TCL_ERROR;
+	}
+    } else {
+	/*
+	 * Get dimensions from image
+	 */
+	Tk_PhotoGetSize(photoH, &w, &h);
+    }
+    if (objc == 7) {
+	if (Tcl_GetIntFromObj(interp, objv[6], &zoom) != TCL_OK) {
+	    return TCL_ERROR;
+	}
+    } else {
+	zoom = 1;
+    }
+
+#ifdef WIN32
+    /*
+     * Windows multiple monitors can have negative coords
+     */
+    minx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    miny = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    displayW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    displayH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+#elif defined(MAC_OSX_TK)
+    /*
+     * OS X multiple monitors can have negative coords
+     * FIX: must be implemented
+     * Probably with CGDisplayPixelsWide & CGDisplayPixelsHigh,
+     * may need to iterate existing displays
+     */
+#else
+    /*
+     * Does X11 allow for negative screen coords?
+     */
+#endif
+    grabX = x - (w / zoom / 2);
+    grabY = y - (h / zoom / 2);
+    grabW = w / zoom;
+    grabH = h / zoom;
+    if (grabW * zoom < w)		++grabW;
+    if (grabH * zoom < h)		++grabH;
+    if (grabW > displayW)		grabW = displayW;
+    if (grabH > displayH)		grabH = displayH;
+    if (grabX < minx)			grabX = minx;
+    if (grabY < miny)			grabY = miny;
+    if (grabX + grabW > displayW)	grabX = displayW - grabW;
+    if (grabY + grabH > displayH)	grabY = displayH - grabH;
+
+    if ((grabW <= 0) || (grabH <= 0)) {
+	return TCL_OK;
+    }
+
+#ifdef WIN32
+    hwnd = GetDesktopWindow();
+    hdc = GetWindowDC(hwnd);
+
+#ifdef WIN7
+    /* Doing GetPixel() on the desktop DC under Windows 7 (Aero) is buggy
+     * and *very* slow.  So BitBlt() from the desktop DC to an in-memory
+     * bitmap and run GetPixel() on that. */
+    hdcCopy = CreateCompatibleDC(hdc);
+    hBitmap = CreateCompatibleBitmap(hdc, grabW, grabH);
+    hBitmapSave = SelectObject(hdcCopy, hBitmap);
+    BitBlt(hdcCopy, 0, 0, grabW, grabH, hdc, grabX, grabY,
+	SRCCOPY | CAPTUREBLT);
+#endif /* WIN7 */
+
+    /* XImage -> Tk_Image */
+    pixelPtr = (unsigned char *) Tcl_Alloc(grabW * grabH * 4);
+    memset(pixelPtr, 0, (grabW * grabH * 4));
+    photoBlock.pixelPtr  = pixelPtr;
+    photoBlock.width     = grabW;
+    photoBlock.height    = grabH;
+    photoBlock.pitch     = grabW * 4;
+    photoBlock.pixelSize = 4;
+    photoBlock.offset[0] = 0;
+    photoBlock.offset[1] = 1;
+    photoBlock.offset[2] = 2;
+    photoBlock.offset[3] = 3;
+
+    /*
+     * We could do a BitBlt for bulk copying, but then we'd have to
+     * do screen size consistency checks and possibly pixel conversion.
+     */
+    for (yy = 0; yy < grabH; yy++) {
+	COLORREF pixel;
+	unsigned long stepDest = yy * photoBlock.pitch;
+	for (xx = 0; xx < grabW; xx++) {
+#ifdef WIN7
+	    pixel = GetPixel(hdcCopy, xx, yy);
+#else /* WIN7 */
+	    pixel = GetPixel(hdc, grabX + xx, grabY + yy);
+#endif /* WIN7 */
+	    if (pixel == CLR_INVALID) {
+		/*
+		 * Skip just this pixel, as others will be valid depending on
+		 * what corner we are in.
+		 */
+		continue;
+	    }
+	    pixelPtr[stepDest + xx * 4 + 0] = GetRValue(pixel);
+	    pixelPtr[stepDest + xx * 4 + 1] = GetGValue(pixel);
+	    pixelPtr[stepDest + xx * 4 + 2] = GetBValue(pixel);
+	    pixelPtr[stepDest + xx * 4 + 3] = 255;
+	}
+    }
+#ifdef WIN7
+    SelectObject(hdcCopy, hBitmapSave);
+    DeleteObject(hBitmap);
+    DeleteDC(hdcCopy);
+#endif /* WIN7 */
+    ReleaseDC(hwnd, hdc);
+#elif defined(MAC_OSX_TK)
+    /*
+     * Adapted from John Anon's ScreenController demo code.
+     */
+    {
+    int xx, yy;
+    unsigned char *screenBytes;
+    int bPerPixel, byPerRow, byPerPixel;
+
+    /* Gets all the screen info: */
+    CGDisplayHideCursor(kCGDirectMainDisplay);
+    bPerPixel  = CGDisplayBitsPerPixel(kCGDirectMainDisplay);
+    byPerRow   = CGDisplayBytesPerRow(kCGDirectMainDisplay);
+    byPerPixel = bPerPixel / 8;
+
+    screenBytes = (unsigned char *)CGDisplayBaseAddress(kCGDirectMainDisplay);
+
+    pixelPtr = (unsigned char *) Tcl_Alloc(grabW * grabH * 4);
+    memset(pixelPtr, 0, (grabW * grabH * 4));
+
+    photoBlock.pixelPtr  = pixelPtr;
+    photoBlock.width     = grabW;
+    photoBlock.height    = grabH;
+    photoBlock.pitch     = grabW * 4;
+    photoBlock.pixelSize = 4;
+    photoBlock.offset[0] = 0;
+    photoBlock.offset[1] = 1;
+    photoBlock.offset[2] = 2;
+    photoBlock.offset[3] = 3;
+
+    for (yy = 0; yy < grabH; yy++) {
+	unsigned long newPixel = 0;
+	unsigned long stepSrc = (grabY + yy) * byPerRow;
+	unsigned long stepDest = yy * photoBlock.pitch;
+
+	for (xx = 0; xx < grabW; xx++) {
+	    if (bPerPixel == 16) {
+		unsigned short thisPixel;
+
+		thisPixel = *((unsigned short*)(screenBytes + stepSrc
+				      + ((grabX + xx) * byPerPixel)));
+#ifdef WORDS_BIGENDIAN
+		/* Transform from 0xARGB (1555) to 0xR0G0B0A0 (4444) */
+		newPixel = (((thisPixel & 0x8000) >> 15) * 0xF8) | /* A */
+		    ((thisPixel & 0x7C00) << 17) | /* R */
+		    ((thisPixel & 0x03E0) << 14) | /* G */
+		    ((thisPixel & 0x001F) << 11);  /* B */
+#else
+		/* Transform from 0xARGB (1555) to 0xB0G0R0A0 (4444) */
+		newPixel = (((thisPixel & 0x8000) >> 15) * 0xF8) | /* A */
+		    ((thisPixel & 0x7C00) << 11) | /* R */
+		    ((thisPixel & 0x03E0) << 14) | /* G */
+		    ((thisPixel & 0x001F) << 17);  /* B */
+#endif
+	    } else if (bPerPixel == 32) {
+		unsigned long thisPixel;
+
+		thisPixel = *((unsigned long*)(screenBytes + stepSrc
+				      + ((grabX + xx) * byPerPixel)));
+
+#ifdef WORDS_BIGENDIAN
+		/* Transformation is from 0xAARRGGBB to 0xRRGGBBAA */
+		newPixel = ((thisPixel & 0xFF000000) >> 24) |
+		    ((thisPixel & 0x00FFFFFF) << 8);
+#else
+		/* Transformation is from 0xAARRGGBB to 0xBBGGRRAA */
+		newPixel = (thisPixel & 0xFF00FF00) |
+		    ((thisPixel & 0x00FF0000) >> 16) |
+		    ((thisPixel & 0x000000FF) << 16);
+#endif
+	    }
+	    *((unsigned int *)(pixelPtr + stepDest + xx * 4)) = newPixel;
+	}
+    }
+    CGDisplayShowCursor(kCGDirectMainDisplay);
+    }
+#else
+    ximage = XGetImage(display, rootWindow,
+	    grabX, grabY, grabW, grabH, AllPlanes, ZPixmap);
+    if (ximage == NULL) {
+	FormatResult(interp, "XGetImage() failed");
+	return TCL_ERROR;
+    }
+
+    /* See TkPostscriptImage */
+
+    ncolors = visual->map_entries;
+    xcolors = (XColor *) ckalloc(sizeof(XColor) * ncolors);
+
+    if ((visual->class == DirectColor) || (visual->class == TrueColor)) {
+	separated = 1;
+	red_shift = green_shift = blue_shift = 0;
+	while ((0x0001 & (ximage->red_mask >> red_shift)) == 0)
+	    red_shift++;
+	while ((0x0001 & (ximage->green_mask >> green_shift)) == 0)
+	    green_shift++;
+	while ((0x0001 & (ximage->blue_mask >> blue_shift)) == 0)
+	    blue_shift++;
+	for (i = 0; i < ncolors; i++) {
+	    xcolors[i].pixel =
+		((i << red_shift) & ximage->red_mask) |
+		((i << green_shift) & ximage->green_mask) |
+		((i << blue_shift) & ximage->blue_mask);
+	}
+    } else {
+	for (i = 0; i < ncolors; i++)
+	    xcolors[i].pixel = i;
+    	red_shift = green_shift = blue_shift = 0; /* compiler warning */
+    }
+
+    XQueryColors(display, Tk_Colormap(tkwin), xcolors, ncolors);
+
+    /* XImage -> Tk_Image */
+    pixelPtr = (unsigned char *) Tcl_Alloc(ximage->width * ximage->height * 4);
+    photoBlock.pixelPtr  = pixelPtr;
+    photoBlock.width     = ximage->width;
+    photoBlock.height    = ximage->height;
+    photoBlock.pitch     = ximage->width * 4;
+    photoBlock.pixelSize = 4;
+    photoBlock.offset[0] = 0;
+    photoBlock.offset[1] = 1;
+    photoBlock.offset[2] = 2;
+    photoBlock.offset[3] = 3;
+
+    for (y = 0; y < ximage->height; y++) {
+	for (x = 0; x < ximage->width; x++) {
+	    int r, g, b;
+	    unsigned long pixel;
+
+	    pixel = XGetPixel(ximage, x, y);
+	    if (separated) {
+		r = (pixel & ximage->red_mask) >> red_shift;
+		g = (pixel & ximage->green_mask) >> green_shift;
+		b = (pixel & ximage->blue_mask) >> blue_shift;
+		r = ((double) xcolors[r].red / USHRT_MAX) * 255;
+		g = ((double) xcolors[g].green / USHRT_MAX) * 255;
+		b = ((double) xcolors[b].blue / USHRT_MAX) * 255;
+	    } else {
+		r = ((double) xcolors[pixel].red / USHRT_MAX) * 255;
+		g = ((double) xcolors[pixel].green / USHRT_MAX) * 255;
+		b = ((double) xcolors[pixel].blue / USHRT_MAX) * 255;
+	    }
+	    pixelPtr[y * photoBlock.pitch + x * 4 + 0] = r;
+	    pixelPtr[y * photoBlock.pitch + x * 4 + 1] = g;
+	    pixelPtr[y * photoBlock.pitch + x * 4 + 2] = b;
+	    pixelPtr[y * photoBlock.pitch + x * 4 + 3] = 255;
+	}
+    }
+#endif
+
+    TK_PHOTOPUTZOOMEDBLOCK(interp, photoH, &photoBlock, 0, 0, w, h,
+	    zoom, zoom, 1, 1, TK_PHOTO_COMPOSITE_SET);
+
+    Tcl_Free((char *) pixelPtr);
+#if !defined(WIN32) && !defined(MAC_OSX_TK)
+    ckfree((char *) xcolors);
+    XDestroyImage(ximage);
+#endif
+
+    return TCL_OK;
+}
