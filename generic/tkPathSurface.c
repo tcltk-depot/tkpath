@@ -13,8 +13,8 @@
 #include "tkCanvArrow.h"
 /*ORLOV*/
 #include <stdarg.h>
-#ifdef WIN32
-#include <window.h>
+#ifdef _WIN32
+#include <windows.h>
 #endif
 
 typedef struct {
@@ -1460,7 +1460,7 @@ LoupeCmd(
     int x, y, w, h, zoom;
     int grabX, grabY, grabW, grabH;
     int minx = 0, miny = 0;
-#ifdef WIN32
+#ifdef _WIN32
     int xx, yy;
     HWND hwnd;
     HDC hdc;
@@ -1522,7 +1522,7 @@ LoupeCmd(
 	zoom = 1;
     }
 
-#ifdef WIN32
+#ifdef _WIN32
     /*
      * Windows multiple monitors can have negative coords
      */
@@ -1559,7 +1559,7 @@ LoupeCmd(
 	return TCL_OK;
     }
 
-#ifdef WIN32
+#ifdef _WIN32
     hwnd = GetDesktopWindow();
     hdc = GetWindowDC(hwnd);
 
@@ -1773,7 +1773,7 @@ LoupeCmd(
 	    zoom, zoom, 1, 1, TK_PHOTO_COMPOSITE_SET);
 
     Tcl_Free((char *) pixelPtr);
-#if !defined(WIN32) && !defined(MAC_OSX_TK)
+#if !defined(_WIN32) && !defined(MAC_OSX_TK)
     ckfree((char *) xcolors);
     XDestroyImage(ximage);
 #endif
