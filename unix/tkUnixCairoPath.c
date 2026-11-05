@@ -63,6 +63,7 @@ typedef struct TkPathContext_ {
 } TkPathContext_;
 
 static void TkPathPrepareForStroke(TkPathContext ctx, Tk_PathStyle *style);
+static void TkPathPrepareForFill(TkPathContext ctx, Tk_PathStyle *style);
 
 static void
 CairoSetFill(TkPathContext ctx, Tk_PathStyle *style)
@@ -79,6 +80,17 @@ CairoSetFill(TkPathContext ctx, Tk_PathStyle *style)
 	    (style->fillRule == WindingRule) ? CAIRO_FILL_RULE_WINDING :
 		CAIRO_FILL_RULE_EVEN_ODD);
 }
+/*====================ORLOV==================*/
+void 
+TkPathFillOverStroke(TkPathContext ctx, Tk_PathStyle *stylePtr) 
+{
+    TkPathContext_ *context = (TkPathContext_ *) ctx;
+    TkPathPrepareForStroke(ctx, stylePtr);
+    cairo_stroke_preserve(context->c);
+    CairoSetFill(ctx, stylePtr);
+    cairo_fill(context->c);
+}
+/*=======================================*/
 
 TkPathContext
 TkPathInit(Tk_Window tkwin, Drawable d)
@@ -525,13 +537,8 @@ TkPathImage(TkPathContext ctx, Tk_Image image, Tk_PhotoHandle photo,
 	}
     } else if (block.pixelSize == 3) {
 	/* Could do something about this? */
-	fprintf(stderr,
-	    "TkPathImage: unaccepted pixel format: 1 pixel is 3 bytes\n");
 	return;
     } else {
-	fprintf(stderr,
-	    "TkPathImage: unaccepted pixel format: 1 pixel is %d bytes\n",
-	    block.pixelSize);
 	return;
     }
     surface = cairo_image_surface_create_for_data(ptr, format,
@@ -709,11 +716,15 @@ TkPathTextDraw(TkPathContext ctx, Tk_PathStyle *style,
 {
     TkPathContext_ *context = (TkPathContext_ *) ctx;
     cairo_font_extents_t fontExtents;
-    int hasStroke = (style->strokeColor != NULL);
+//    int hasStroke = (style->strokeColor != NULL);
+    int hasStroke = (GetColorFromPathColor(style->strokeColor) != NULL);
     int hasFill = (GetColorFromPathColor(style->fill) != NULL);
+    int hasStrokeGr = (GetGradientMasterFromPathColor(style->strokeColor) != NULL);
+    int hasFillGr = (GetGradientMasterFromPathColor(style->fill) != NULL);
     Tcl_Encoding enc;
     Tcl_DString ds;
     char *fullUtf;
+    fillOverStroke = style->fillOverStroke;
 
     enc = Tcl_GetEncoding(NULL, "utf-8");
     Tcl_DStringInit(&ds);
@@ -725,28 +736,59 @@ TkPathTextDraw(TkPathContext ctx, Tk_PathStyle *style,
 	    convertTkFontWeight2CairoFontWeight(textStylePtr->fontWeight));
     cairo_set_font_size(context->c, textStylePtr->fontSize);
     cairo_font_extents(context->c, &fontExtents);
+    multiline_text_path(ctx, x, y,
+		fontExtents.ascent + fontExtents.descent, fullUtf);
 
-    if (hasStroke && hasFill) {
-	multiline_text_path(ctx, x, y,
-		fontExtents.ascent + fontExtents.descent, fullUtf);
-	if (fillOverStroke) {
-	    TkPathPrepareForStroke(ctx, style);
-	    cairo_stroke_preserve(context->c);
-	    CairoSetFill(ctx, style);
-	    cairo_fill(context->c);
-	} else {
-	    TkPathFillAndStroke(ctx, style);
-	}
+    if (hasFillGr) {
+	    if (fillOverStroke &&  (hasStroke || hasStrokeGr)) {
+		TkPathPrepareForStroke(ctx, style);
+		cairo_stroke_preserve(context->c);
+		TkPathPrepareForFill(ctx, style);
+		cairo_fill(context->c); // Заполняем внутренность
+	    } else {
+		TkPathPrepareForFill(ctx, style);
+		if (hasStroke || hasStrokeGr) {
+		    cairo_fill_preserve(context->c); // Заполняем внутренность
+		    TkPathPrepareForStroke(ctx, style);
+		    cairo_stroke(context->c);
+		} else {
+		    cairo_fill(context->c); // Заполняем внутренность
+		}
+	    }
+    } else if ((hasStroke && hasFill && (!hasStrokeGr && !hasFillGr)) || (hasFill && hasStrokeGr)) {
+	    if (!fillOverStroke || (!hasStroke && !hasStrokeGr)) {
+		TkPathPrepareForFill(ctx, style);
+		cairo_fill_preserve(context->c); // Заполняем внутренность
+		    TkPathStroke(ctx, style);
+	    } else {
+		TkPathPrepareForStroke(ctx, style);
+		cairo_stroke_preserve(context->c);
+		TkPathPrepareForFill(ctx, style);
+		cairo_fill(context->c); // Заполняем внутренность
+	    }
     } else if (hasFill) {
-	CairoSetFill(ctx, style);
-	multiline_show_text(ctx, x, y,
-		fontExtents.ascent + fontExtents.descent, fullUtf);
-    } else if (hasStroke) {
-	multiline_text_path(ctx, x, y,
-		fontExtents.ascent + fontExtents.descent, fullUtf);
+	TkPathPrepareForFill(ctx, style);
+	if (!hasStroke && !hasStrokeGr) {
+		cairo_fill(context->c); // Заполняем внутренность
+	} else if (hasStroke || hasStrokeGr) {
+	    if (fillOverStroke) {
+		    TkPathPrepareForStroke(ctx, style);
+		    cairo_stroke_preserve(context->c);
+		TkPathPrepareForFill(ctx, style);
+		cairo_fill(context->c); // Заполняем внутренность
+	    } else {
+		TkPathPrepareForFill(ctx, style);
+		cairo_fill_preserve(context->c); // Заполняем внутренность
+		    TkPathPrepareForStroke(ctx, style);
+		    cairo_stroke(context->c);
+	    }
+	} else {
+		cairo_fill(context->c); // Заполняем внутренность
+
+	}
+    } else if (hasStroke || hasStrokeGr) {
 	TkPathStroke(ctx, style);
     }
-
     Tcl_DStringFree(&ds);
 }
 
@@ -927,13 +969,59 @@ TkPathPrepareForStroke(TkPathContext ctx, Tk_PathStyle *style)
 {
     TkPathContext_ *context = (TkPathContext_ *) ctx;
     Tk_PathDash *dashPtr;
+    TkPathGradientMaster *gradientPtr;
+    gradientPtr = GetGradientMasterFromPathColor(style->strokeColor);
+/* ORLOV*/
+    int imax;
+    if (gradientPtr != NULL) {
+	cairo_pattern_t *pattern = NULL;
+        // В зависимости от типа градиента (Linear или Radial)
+        if (gradientPtr->type == kPathGradientTypeLinear) {
+            pattern = cairo_pattern_create_linear(
+            gradientPtr->linearFill.transitionPtr->x1, gradientPtr->linearFill.transitionPtr->y1,
+            gradientPtr->linearFill.transitionPtr->x2, gradientPtr->linearFill.transitionPtr->y2);
+	    imax = gradientPtr->linearFill.stopArrPtr->nstops;
+            int i;
+            for (i = 0; i < imax; i++) {
+                cairo_pattern_add_color_stop_rgba(pattern, 
+                    gradientPtr->linearFill.stopArrPtr->stops[i]->offset,
+                    (double)(gradientPtr->linearFill.stopArrPtr->stops[i]->color->red) / 0xFFFF,
+                    (double)(gradientPtr->linearFill.stopArrPtr->stops[i]->color->green) / 0xFFFF,
+                    (double)(gradientPtr->linearFill.stopArrPtr->stops[i]->color->blue) / 0xFFFF,
+                    gradientPtr->linearFill.stopArrPtr->stops[i]->opacity * style->strokeOpacity);
+            }
 
+        } else if (gradientPtr->type == kPathGradientTypeRadial) {
+            pattern = cairo_pattern_create_radial(
+            gradientPtr->radialFill.radialPtr->centerX, gradientPtr->radialFill.radialPtr->centerY, 0,
+            gradientPtr->radialFill.radialPtr->focalX, gradientPtr->radialFill.radialPtr->focalY, gradientPtr->radialFill.radialPtr->radius);
+	    imax = gradientPtr->radialFill.stopArrPtr->nstops;
+            int i;
+            for (i = 0; i < imax; i++) {
+                cairo_pattern_add_color_stop_rgba(pattern, 
+                    gradientPtr->radialFill.stopArrPtr->stops[i]->offset,
+                    gradientPtr->radialFill.stopArrPtr->stops[i]->color->red / 65535.0,
+                    gradientPtr->radialFill.stopArrPtr->stops[i]->color->green / 65535.0,
+                    gradientPtr->radialFill.stopArrPtr->stops[i]->color->blue / 65535.0,
+                    gradientPtr->radialFill.stopArrPtr->stops[i]->opacity * style->strokeOpacity);
+            }
+        }
+
+        if (pattern) {
+            // Переносим стопы (stops) из структуры градиента в паттерн Cairo
+            cairo_set_source(context->c, pattern);
+            cairo_pattern_destroy(pattern);
+        }
+
+    } else {
     /* Patch from Tim Edwards to handle color correctly on 64 bit arch. */
-    cairo_set_source_rgba(context->c,
-	    (double)(style->strokeColor->red) / 0xFFFF,
-	    (double)(style->strokeColor->green) / 0xFFFF,
-	    (double)(style->strokeColor->blue) / 0xFFFF,
-	    style->strokeOpacity);
+	    cairo_set_source_rgba(context->c,
+		(double)(style->strokeColor->color->red) / 0xFFFF,
+		(double)(style->strokeColor->color->green) / 0xFFFF,
+		(double)(style->strokeColor->color->blue) / 0xFFFF,
+		style->strokeOpacity);
+    }
+
     cairo_set_line_width(context->c, style->strokeWidth);
 
     switch (style->capStyle) {
@@ -976,13 +1064,79 @@ TkPathPrepareForStroke(TkPathContext ctx, Tk_PathStyle *style)
     }
 }
 
+/*ORLOV*/
+static void
+TkPathPrepareForFill(TkPathContext ctx, Tk_PathStyle *style)
+{
+    TkPathContext_ *context = (TkPathContext_ *) ctx;
+    TkPathGradientMaster *gradientPtr;
+    gradientPtr = GetGradientMasterFromPathColor(style->fill);
+    int imax;
+    GradientStop *stop;
+    if (gradientPtr != NULL) {
+	cairo_pattern_t *pattern = NULL;
+        // В зависимости от типа градиента (Linear или Radial)
+        if (gradientPtr->type == kPathGradientTypeLinear) {
+            pattern = cairo_pattern_create_linear(
+                gradientPtr->linearFill.transitionPtr->x1, gradientPtr->linearFill.transitionPtr->y1,
+                gradientPtr->linearFill.transitionPtr->x2, gradientPtr->linearFill.transitionPtr->y2);
+	    imax = gradientPtr->linearFill.stopArrPtr->nstops;
+            int i;
+            for (i = 0; i < imax; i++) {
+                cairo_pattern_add_color_stop_rgba(pattern, 
+                    gradientPtr->linearFill.stopArrPtr->stops[i]->offset,
+                    (double)(gradientPtr->linearFill.stopArrPtr->stops[i]->color->red) / 0xFFFF,
+                    (double)(gradientPtr->linearFill.stopArrPtr->stops[i]->color->green) / 0xFFFF,
+                    (double)(gradientPtr->linearFill.stopArrPtr->stops[i]->color->blue) / 0xFFFF,
+                    gradientPtr->linearFill.stopArrPtr->stops[i]->opacity * style->fillOpacity);
+            }
+
+        } else if (gradientPtr->type == kPathGradientTypeRadial) {
+            pattern = cairo_pattern_create_radial(
+                gradientPtr->radialFill.radialPtr->focalX, gradientPtr->radialFill.radialPtr->focalY, 
+                gradientPtr->radialFill.radialPtr->centerX, gradientPtr->radialFill.radialPtr->centerY, 0,
+                gradientPtr->radialFill.radialPtr->radius);
+
+
+	    imax = gradientPtr->radialFill.stopArrPtr->nstops;
+            int i;
+	    for (i = 0; i < imax; i++) {
+		stop = gradientPtr->radialFill.stopArrPtr->stops[i];
+		cairo_pattern_add_color_stop_rgba(pattern, stop->offset,
+		    RedDoubleFromXColorPtr(stop->color),
+		    GreenDoubleFromXColorPtr(stop->color),
+		    BlueDoubleFromXColorPtr(stop->color),
+		    stop->opacity * style->fillOpacity);
+	    }
+
+        }
+
+        if (pattern) {
+// Переносим стопы (stops) из структуры градиента в паттерн Cairo
+            cairo_set_source(context->c, pattern);
+            cairo_pattern_destroy(pattern);
+        }
+
+    } else {
+    /* Patch from Tim Edwards to handle color correctly on 64 bit arch. */
+	    cairo_set_source_rgba(context->c,
+		(double)(style->fill->color->red) / 0xFFFF,
+		(double)(style->fill->color->green) / 0xFFFF,
+		(double)(style->fill->color->blue) / 0xFFFF,
+		style->fillOpacity);
+    }
+    cairo_set_fill_rule(context->c,
+	    (style->fillRule == WindingRule) ? CAIRO_FILL_RULE_WINDING :
+		CAIRO_FILL_RULE_EVEN_ODD);
+}
+
 void
 TkPathStroke(TkPathContext ctx, Tk_PathStyle *style)
 {
     TkPathContext_ *context = (TkPathContext_ *) ctx;
-
     TkPathPrepareForStroke(ctx, style);
-    cairo_stroke(context->c);
+//    cairo_stroke(context->c);
+    cairo_stroke_preserve(context->c);
 }
 
 void
@@ -991,7 +1145,9 @@ TkPathFill(TkPathContext ctx, Tk_PathStyle *style)
     TkPathContext_ *context = (TkPathContext_ *) ctx;
 
     CairoSetFill(ctx, style);
-    cairo_fill(context->c);
+//ORLOV
+//    cairo_fill(context->c);
+    cairo_fill_preserve(context->c);
 }
 
 void
@@ -1084,6 +1240,14 @@ void TkPathPaintLinearGradient(TkPathContext ctx, PathRect *bbox,
     GradientStop *stop;
     GradientStopArray *stopArrPtr;
     cairo_pattern_t *pattern;
+/*ORLOV*/
+    int type; /* 0 - gradient for fill, 1 - gradient for stroke*/
+    if (fillOpacity > 1) {
+	fillOpacity = fillOpacity - 2;
+	type = 1;
+    } else {
+	type = 0;
+    }
 
     if (fillPtr->units == kPathGradientUnitsBoundingBox) {
 	if (bbox->x2 - bbox->x1 == 0 || bbox->y2 - bbox->y1 == 0) {
@@ -1132,10 +1296,17 @@ void TkPathPaintLinearGradient(TkPathContext ctx, PathRect *bbox,
 	    (fillRule == WindingRule) ? CAIRO_FILL_RULE_WINDING :
 		CAIRO_FILL_RULE_EVEN_ODD);
     cairo_pattern_set_extend(pattern, GetCairoExtend(fillPtr->method));
-    cairo_fill_preserve(context->c);
+    if (type == 0) {
+	cairo_fill_preserve(context->c);
+    } else {
+	cairo_stroke_preserve(context->c);    
+//	cairo_fill_preserve(context->c);
+    }
 
     cairo_pattern_destroy(pattern);
-    cairo_restore(context->c);
+    if (type != 100) {
+	cairo_restore(context->c);
+    }
 }
 
 void
@@ -1150,6 +1321,14 @@ TkPathPaintRadialGradient(TkPathContext ctx, PathRect *bbox,
     cairo_pattern_t *pattern;
     GradientStopArray *stopArrPtr;
     RadialTransition *tPtr;
+/*ORLOV*/
+    int type; /* 0 - gradient for fill, 1 - gradient for stroke*/
+    if (fillOpacity > 1) {
+	fillOpacity = fillOpacity - 2;
+	type = 1;
+    } else {
+	type = 0;
+    }
 
     if (fillPtr->units == kPathGradientUnitsBoundingBox) {
 	if (bbox->x2 - bbox->x1 == 0 || bbox->y2 - bbox->y1 == 0) {
@@ -1194,10 +1373,16 @@ TkPathPaintRadialGradient(TkPathContext ctx, PathRect *bbox,
 	    (fillRule == WindingRule) ? CAIRO_FILL_RULE_WINDING :
 		CAIRO_FILL_RULE_EVEN_ODD);
     cairo_pattern_set_extend(pattern, GetCairoExtend(fillPtr->method));
-    cairo_fill_preserve(context->c);
+    if (type == 0) {
+	cairo_fill_preserve(context->c);
+    } else {
+	cairo_stroke(context->c);    
+    }
 
     cairo_pattern_destroy(pattern);
-    cairo_restore(context->c);
+    if (type != 100) {
+	cairo_restore(context->c);
+    }
 }
 
 int

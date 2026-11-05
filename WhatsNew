@@ -1,5 +1,16 @@
 WHAT'S NEW
 ==========
+In tkpath 0.4.4 (November 2026):
+-------------------------------
+	* linux,windows: support for the -filloverstroke option has been added for prect, circle,
+	ellipse, path objects. The -filloverstroke option has been included fillOptions list
+	* linux,windows: support for gradient fills for strokes has also been added 
+	(-stroke color|gradientToken)
+
+In tkpath 0.4.3 (August 2026):
+
+	* tkPathSurface.cpp: add function tkp::loupe:
+	* doc: add tkp::loupe
 
 In tkpath 0.3.3 (October 2014):
 -------------------------------
