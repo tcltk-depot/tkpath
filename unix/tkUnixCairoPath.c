@@ -990,11 +990,14 @@ TkPathPrepareForStroke(TkPathContext ctx, Tk_PathStyle *style)
                     (double)(gradientPtr->linearFill.stopArrPtr->stops[i]->color->blue) / 0xFFFF,
                     gradientPtr->linearFill.stopArrPtr->stops[i]->opacity * style->strokeOpacity);
             }
-
         } else if (gradientPtr->type == kPathGradientTypeRadial) {
             pattern = cairo_pattern_create_radial(
-            gradientPtr->radialFill.radialPtr->centerX, gradientPtr->radialFill.radialPtr->centerY, 0,
-            gradientPtr->radialFill.radialPtr->focalX, gradientPtr->radialFill.radialPtr->focalY, gradientPtr->radialFill.radialPtr->radius);
+	    gradientPtr->radialFill.radialPtr->focalX, 
+	    gradientPtr->radialFill.radialPtr->focalY, 
+	    0.0,
+            gradientPtr->radialFill.radialPtr->centerX, 
+            gradientPtr->radialFill.radialPtr->centerY,
+            gradientPtr->radialFill.radialPtr->radius);
 	    imax = gradientPtr->radialFill.stopArrPtr->nstops;
             int i;
             for (i = 0; i < imax; i++) {
@@ -1093,10 +1096,12 @@ TkPathPrepareForFill(TkPathContext ctx, Tk_PathStyle *style)
 
         } else if (gradientPtr->type == kPathGradientTypeRadial) {
             pattern = cairo_pattern_create_radial(
-                gradientPtr->radialFill.radialPtr->focalX, gradientPtr->radialFill.radialPtr->focalY, 
-                gradientPtr->radialFill.radialPtr->centerX, gradientPtr->radialFill.radialPtr->centerY, 0,
+                gradientPtr->radialFill.radialPtr->focalX, 
+                gradientPtr->radialFill.radialPtr->focalY, 
+                0.0,
+                gradientPtr->radialFill.radialPtr->centerX, 
+                gradientPtr->radialFill.radialPtr->centerY, 
                 gradientPtr->radialFill.radialPtr->radius);
-
 
 	    imax = gradientPtr->radialFill.stopArrPtr->nstops;
             int i;
