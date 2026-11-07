@@ -511,7 +511,7 @@ PathC::StrokeGradient(Tk_PathStyle *style)
 {
     int hasStroke = (GetColorFromPathColor(style->strokeColor) != NULL);
     int hasStrokeGr = (GetGradientMasterFromPathColor(style->strokeColor) != NULL);
-    int strokeOpacity = style->strokeOpacity;
+    double strokeOpacity = style->strokeOpacity;
     /* Trim strokeOpacity to [0,1] */
     if (strokeOpacity < 0.0) {
         strokeOpacity = 0.0;
@@ -571,7 +571,7 @@ PathC::StrokeGradient(Tk_PathStyle *style)
     	    radius.Y = float(tPtr->radius);
     	    focal.X = float(tPtr->focalX);
     	    focal.Y = float(tPtr->focalY);
-	    mGraphics->SetClip(mPath);
+//	    mGraphics->SetClip(mPath);
 	    stop = stopArrPtr->stops[nstops-1];
 
 	    GraphicsPath path;
@@ -611,7 +611,7 @@ PathC::FillGradient(Tk_PathStyle *style)
 {
     int hasFill = (GetColorFromPathColor(style->fill) != NULL);
     int hasFillGr = (GetGradientMasterFromPathColor(style->fill) != NULL);
-    int fillOpacity = style->fillOpacity;
+    double fillOpacity = style->fillOpacity;
     /* Trim fillOpacity to [0,1] */
     if (fillOpacity < 0.0) {
         fillOpacity = 0.0;
