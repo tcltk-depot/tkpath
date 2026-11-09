@@ -536,13 +536,22 @@ PathC::StrokeGradient(Tk_PathStyle *style)
 	    float	x, y, width, height;
 	    PathRect	*tPtr;
 	    PointF	p1, p2, pstart, pend;
+	    RectF bounds;
+	    mPath->GetBounds(&bounds);
 	    tPtr = gradientPtr->linearFill.transitionPtr;
 //	    GraphicsContainer container = mGraphics->BeginContainer();
 
-    	    p1.X = float(tPtr->x1);
-    	    p1.Y = float(tPtr->y1);
-	    p2.X = float(tPtr->x2);
-    	    p2.Y = float(tPtr->y2);
+	    if (gradientPtr->linearFill.units == kPathGradientUnitsBoundingBox) {
+		p1.X = bounds.X + float(tPtr->x1) * bounds.Width;
+		p1.Y = bounds.Y + float(tPtr->y1) * bounds.Height;
+		p2.X = bounds.X + float(tPtr->x2) * bounds.Width;
+		p2.Y = bounds.Y + float(tPtr->y2) * bounds.Height;
+	    } else {
+		p1.X = float(tPtr->x1);
+		p1.Y = float(tPtr->y1);
+		p2.X = float(tPtr->x2);
+	        p2.Y = float(tPtr->y2);
+	    }
 	    stop = stopArrPtr->stops[0];
 	    Color col1(MakeGDIPlusColor(stop->color, stop->opacity * strokeOpacity));
 	    stop = stopArrPtr->stops[nstops-1];
@@ -564,13 +573,25 @@ PathC::StrokeGradient(Tk_PathStyle *style)
 	} else if (gradientPtr->type == kPathGradientTypeRadial) {
 	    RadialTransition     *tPtr;
 	    PointF               center, radius, focal;
+	    RectF bounds;
+	    mPath->GetBounds(&bounds);
 	    tPtr = gradientPtr->radialFill.radialPtr;
-    	    center.X = float(tPtr->centerX);
-    	    center.Y = float(tPtr->centerY);
-    	    radius.X = float(tPtr->radius);
-    	    radius.Y = float(tPtr->radius);
-    	    focal.X = float(tPtr->focalX);
-    	    focal.Y = float(tPtr->focalY);
+
+	    if (gradientPtr->radialFill.units == kPathGradientUnitsBoundingBox) {
+		center.X = bounds.X + float(tPtr->centerX) * bounds.Width;
+		center.Y = bounds.Y + float(tPtr->centerY) * bounds.Height;
+	        radius.X = float(tPtr->radius) * bounds.Width;
+		radius.Y = float(tPtr->radius) * bounds.Height;
+		focal.X = bounds.X + float(tPtr->focalX) * bounds.Width;
+	        focal.Y = bounds.Y + float(tPtr->focalY) * bounds.Height;
+	    } else {
+		center.X = float(tPtr->centerX);
+	        center.Y = float(tPtr->centerY);
+	        radius.X = float(tPtr->radius);
+	        radius.Y = float(tPtr->radius);
+	        focal.X = float(tPtr->focalX);
+	        focal.Y = float(tPtr->focalY);
+	    }
 //	    mGraphics->SetClip(mPath);
 	    stop = stopArrPtr->stops[nstops-1];
 
