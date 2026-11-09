@@ -972,11 +972,32 @@ TkPathPrepareForStroke(TkPathContext ctx, Tk_PathStyle *style)
     TkPathGradientMaster *gradientPtr;
     gradientPtr = GetGradientMasterFromPathColor(style->strokeColor);
 /* ORLOV*/
+    PathRect bbox;
+    double x1, y1, x2, y2;
     int imax;
     if (gradientPtr != NULL) {
 	cairo_pattern_t *pattern = NULL;
+	cairo_path_extents(context->c, &x1, &y1, &x2, &y2);
+	bbox.x1 = x1;
+	bbox.y1 = y1;
+	bbox.x2 = x2;
+	bbox.y2 = y2;
         // В зависимости от типа градиента (Linear или Radial)
         if (gradientPtr->type == kPathGradientTypeLinear) {
+    /*
+     * We need to do like this since this is how SVG defines gradient drawing
+     * in case the transition vector is in relative coordinates.
+     */
+	    if (gradientPtr->linearFill.units == kPathGradientUnitsBoundingBox) {
+		if (bbox.x2 - bbox.x1 == 0 || bbox.y2 - bbox.y1 == 0) {
+		    return;
+		}
+	    }
+	    if (gradientPtr->linearFill.units == kPathGradientUnitsBoundingBox) {
+		cairo_translate(context->c, bbox.x1, bbox.y1);
+		cairo_scale(context->c, bbox.x2 - bbox.x1, bbox.y2 - bbox.y1);
+	    }
+
             pattern = cairo_pattern_create_linear(
             gradientPtr->linearFill.transitionPtr->x1, gradientPtr->linearFill.transitionPtr->y1,
             gradientPtr->linearFill.transitionPtr->x2, gradientPtr->linearFill.transitionPtr->y2);
@@ -990,14 +1011,25 @@ TkPathPrepareForStroke(TkPathContext ctx, Tk_PathStyle *style)
                     (double)(gradientPtr->linearFill.stopArrPtr->stops[i]->color->blue) / 0xFFFF,
                     gradientPtr->linearFill.stopArrPtr->stops[i]->opacity * style->strokeOpacity);
             }
+
         } else if (gradientPtr->type == kPathGradientTypeRadial) {
+	    if (gradientPtr->radialFill.units == kPathGradientUnitsBoundingBox) {
+		if (bbox.x2 - bbox.x1 == 0 || bbox.y2 - bbox.y1 == 0) {
+		    return;
+		}
+	    }
+	    if (gradientPtr->radialFill.units == kPathGradientUnitsBoundingBox) {
+		cairo_translate(context->c, bbox.x1, bbox.y1);
+		cairo_scale(context->c, bbox.x2 - bbox.x1, bbox.y2 - bbox.y1);
+	    }
+
             pattern = cairo_pattern_create_radial(
-	    gradientPtr->radialFill.radialPtr->focalX, 
-	    gradientPtr->radialFill.radialPtr->focalY, 
-	    0.0,
-            gradientPtr->radialFill.radialPtr->centerX, 
-            gradientPtr->radialFill.radialPtr->centerY,
-            gradientPtr->radialFill.radialPtr->radius);
+        	gradientPtr->radialFill.radialPtr->focalX, 
+        	gradientPtr->radialFill.radialPtr->focalY,
+        	0.0,
+        	gradientPtr->radialFill.radialPtr->centerX, 
+        	gradientPtr->radialFill.radialPtr->centerY, 
+		gradientPtr->radialFill.radialPtr->radius);
 	    imax = gradientPtr->radialFill.stopArrPtr->nstops;
             int i;
             for (i = 0; i < imax; i++) {
@@ -1076,10 +1108,26 @@ TkPathPrepareForFill(TkPathContext ctx, Tk_PathStyle *style)
     gradientPtr = GetGradientMasterFromPathColor(style->fill);
     int imax;
     GradientStop *stop;
+    PathRect bbox;
+    double x1, y1, x2, y2;
     if (gradientPtr != NULL) {
 	cairo_pattern_t *pattern = NULL;
+	cairo_path_extents(context->c, &x1, &y1, &x2, &y2);
+	bbox.x1 = x1;
+	bbox.y1 = y1;
+	bbox.x2 = x2;
+	bbox.y2 = y2;
         // В зависимости от типа градиента (Linear или Radial)
         if (gradientPtr->type == kPathGradientTypeLinear) {
+	    if (gradientPtr->linearFill.units == kPathGradientUnitsBoundingBox) {
+		if (bbox.x2 - bbox.x1 == 0 || bbox.y2 - bbox.y1 == 0) {
+		    return;
+		}
+	    }
+	    if (gradientPtr->linearFill.units == kPathGradientUnitsBoundingBox) {
+		cairo_translate(context->c, bbox.x1, bbox.y1);
+		cairo_scale(context->c, bbox.x2 - bbox.x1, bbox.y2 - bbox.y1);
+	    }
             pattern = cairo_pattern_create_linear(
                 gradientPtr->linearFill.transitionPtr->x1, gradientPtr->linearFill.transitionPtr->y1,
                 gradientPtr->linearFill.transitionPtr->x2, gradientPtr->linearFill.transitionPtr->y2);
@@ -1095,12 +1143,21 @@ TkPathPrepareForFill(TkPathContext ctx, Tk_PathStyle *style)
             }
 
         } else if (gradientPtr->type == kPathGradientTypeRadial) {
+	    if (gradientPtr->radialFill.units == kPathGradientUnitsBoundingBox) {
+		if (bbox.x2 - bbox.x1 == 0 || bbox.y2 - bbox.y1 == 0) {
+		    return;
+		}
+	    }
+	    if (gradientPtr->radialFill.units == kPathGradientUnitsBoundingBox) {
+		cairo_translate(context->c, bbox.x1, bbox.y1);
+		cairo_scale(context->c, bbox.x2 - bbox.x1, bbox.y2 - bbox.y1);
+	    }
             pattern = cairo_pattern_create_radial(
                 gradientPtr->radialFill.radialPtr->focalX, 
-                gradientPtr->radialFill.radialPtr->focalY, 
-                0.0,
+                gradientPtr->radialFill.radialPtr->focalY,
+                0.0,  
                 gradientPtr->radialFill.radialPtr->centerX, 
-                gradientPtr->radialFill.radialPtr->centerY, 
+                gradientPtr->radialFill.radialPtr->centerY,
                 gradientPtr->radialFill.radialPtr->radius);
 
 	    imax = gradientPtr->radialFill.stopArrPtr->nstops;
@@ -1134,7 +1191,6 @@ TkPathPrepareForFill(TkPathContext ctx, Tk_PathStyle *style)
 	    (style->fillRule == WindingRule) ? CAIRO_FILL_RULE_WINDING :
 		CAIRO_FILL_RULE_EVEN_ODD);
 }
-
 void
 TkPathStroke(TkPathContext ctx, Tk_PathStyle *style)
 {
