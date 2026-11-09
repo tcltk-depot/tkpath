@@ -50,8 +50,11 @@ DisplayArrow(Tk_PathCanvas canvas, ArrowDescr *arrowDescr,
         if (arrowDescr->arrowFillRatio > 0.0 &&
 	    arrowDescr->arrowLength != 0.0) {
             arrowStyle.strokeWidth = 0.0;
-            fc.color = arrowStyle.strokeColor;
-            fc.gradientInstPtr = NULL;
+/*ORLOV*/
+//            fc.color = arrowStyle.strokeColor;
+//            fc.gradientInstPtr = NULL;
+            fc.color = arrowStyle.strokeColor->color;
+            fc.gradientInstPtr =  arrowStyle.strokeColor->gradientInstPtr;
             arrowStyle.fill = &fc;
             arrowStyle.fillOpacity = arrowStyle.strokeOpacity;
 #if !defined(_WIN32) && !defined(PLATFORM_SDL) && !defined(MAC_OSX_TK)
@@ -83,8 +86,11 @@ PaintArrow(TkPathContext context, ArrowDescr *arrowDescr,
         if (arrowDescr->arrowFillRatio > 0.0 &&
 	    arrowDescr->arrowLength != 0.0) {
             arrowStyle.strokeWidth = 0.0;
-            fc.color = arrowStyle.strokeColor;
-            fc.gradientInstPtr = NULL;
+/*ORLOV*/
+//            fc.color = arrowStyle.strokeColor;
+//            fc.gradientInstPtr = NULL;
+            fc.color = arrowStyle.strokeColor->color;
+            fc.gradientInstPtr =  arrowStyle.strokeColor->gradientInstPtr;
             arrowStyle.fill = &fc;
             arrowStyle.fillOpacity = arrowStyle.strokeOpacity;
         } else {

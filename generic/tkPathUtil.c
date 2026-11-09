@@ -128,7 +128,6 @@ TkPathDrawPath(
      * Any transform matrix need to be considered and canvas drawable
      * offset must always be taken into account. Note the order!
      */
-
     if (mPtr != NULL) {
         TkPathPushTMatrix(context, mPtr);
     }
@@ -168,27 +167,70 @@ TkPathPaintPath(
     TkPathGradientMaster *gradientPtr = GetGradientMasterFromPathColor(stylePtr->fill);
 
     if (gradientPtr != NULL) {
-        TkPathClipToPath(context, stylePtr->fillRule);
-        PathGradientPaint(context, bboxPtr, gradientPtr, stylePtr->fillRule, stylePtr->fillOpacity);
+/*ORLOV*/
+	if (stylePtr->fillOverStroke && (GetColorFromPathColor(stylePtr->strokeColor) || GetGradientMasterFromPathColor(stylePtr->strokeColor))) {
+	    TkPathStroke(context, stylePtr);
+
+    	    TkPathClipToPath(context, stylePtr->fillRule);
+    	    PathGradientPaint(context, bboxPtr, gradientPtr, stylePtr->fillRule, stylePtr->fillOpacity);
 
         /* NB: Both CoreGraphics on MacOSX and Win32 GDI (and cairo from 1.0)
          *     clear the current path when setting clipping. Need therefore
          *     to redo the path.
          */
-        if (TkPathDrawingDestroysPath()) {
-            TkPathMakePath(context, atomPtr, stylePtr);
-        }
+
+    	    if (TkPathDrawingDestroysPath()) {
+        	TkPathMakePath(context, atomPtr, stylePtr);
+    	    }
 
         /* We shall remove the path clipping here! */
-        TkPathReleaseClipToPath(context);
-    }
+    	    TkPathReleaseClipToPath(context);
 
-    if ((GetColorFromPathColor(stylePtr->fill) != NULL) && (stylePtr->strokeColor != NULL)) {
-        TkPathFillAndStroke(context, stylePtr);
+
+	} else {
+    	    TkPathClipToPath(context, stylePtr->fillRule);
+    	    PathGradientPaint(context, bboxPtr, gradientPtr, stylePtr->fillRule, stylePtr->fillOpacity);
+
+        /* NB: Both CoreGraphics on MacOSX and Win32 GDI (and cairo from 1.0)
+         *     clear the current path when setting clipping. Need therefore
+         *     to redo the path.
+         */
+    	    if (TkPathDrawingDestroysPath()) {
+        	TkPathMakePath(context, atomPtr, stylePtr);
+    	    }
+        /* We shall remove the path clipping here! */
+    	    TkPathReleaseClipToPath(context);
+	    if (GetColorFromPathColor(stylePtr->strokeColor) || GetGradientMasterFromPathColor(stylePtr->strokeColor)) {
+		TkPathStroke(context, stylePtr);
+	    }
+	}
+    }
+/*ORLOV*/
+    if ((GetColorFromPathColor(stylePtr->fill) != NULL) && (GetColorFromPathColor(stylePtr->strokeColor) != NULL)) {
+	if (stylePtr->fillOverStroke) {
+	    TkPathFillOverStroke(context, stylePtr);
+	} else {
+    	    TkPathFillAndStroke(context, stylePtr);
+	}
+
     } else if (GetColorFromPathColor(stylePtr->fill) != NULL) {
-        TkPathFill(context, stylePtr);
-    } else if (stylePtr->strokeColor != NULL) {
+	if (GetGradientMasterFromPathColor(stylePtr->strokeColor) != NULL) {
+	    if (stylePtr->fillOverStroke) {
+		TkPathStroke(context, stylePtr);
+    		TkPathFill(context, stylePtr);
+	    } else {
+    		TkPathFill(context, stylePtr);
+		TkPathStroke(context, stylePtr);
+	    }
+	} else {
+    	    TkPathFill(context, stylePtr);
+	}
+    } else if (GetColorFromPathColor(stylePtr->strokeColor) != NULL && GetGradientMasterFromPathColor(stylePtr->fill) == NULL) {
         TkPathStroke(context, stylePtr);
+    } else  if (GetGradientMasterFromPathColor(stylePtr->strokeColor) != NULL) {
+	if (GetGradientMasterFromPathColor(stylePtr->fill) == NULL) {
+    	    TkPathStroke(context, stylePtr);
+	}
     }
 }
 

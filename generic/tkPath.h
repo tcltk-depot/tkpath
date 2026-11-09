@@ -201,18 +201,23 @@ enum {
     PATH_STYLE_OPTION_STROKE_OPACITY	    = (1L << 13),
     PATH_STYLE_OPTION_STROKE_STIPPLE	    = (1L << 14),
     PATH_STYLE_OPTION_STROKE_WIDTH	    = (1L << 15),
-    PATH_CORE_OPTION_PARENT		    = (1L << 16),
-    PATH_CORE_OPTION_STYLENAME		    = (1L << 17),
-    PATH_CORE_OPTION_TAGS		    = (1L << 18),
+    PATH_STYLE_OPTION_FILLOVERSTROKE	    = (1L << 16),
+    PATH_CORE_OPTION_PARENT		    = (1L << 17),
+    PATH_CORE_OPTION_STYLENAME		    = (1L << 18),
+    PATH_CORE_OPTION_TAGS		    = (1L << 19),
 };
 
-#define PATH_STYLE_OPTION_INDEX_END 17	/* Use this for item specific flags */
+#define PATH_STYLE_OPTION_INDEX_END 18	/* Use this for item specific flags */
 
 typedef struct Tk_PathStyle {
     Tk_OptionTable optionTable;	/* Not used for canvas. */
     Tk_Uid name;		/* Not used for canvas. */
     int mask;			/* Bits set for actual options modified. */
-    XColor *strokeColor;	/* Stroke color. */
+/*ORLOV*/
+//    XColor *strokeColor;	/* Stroke color. */
+    Tcl_Obj *strokeObj;		/* This is just used for option parsing. */
+    TkPathColor *strokeColor;		/* Record XColor + TkPathGradientInst. */
+
     double strokeWidth;		/* Width of stroke. */
     double strokeOpacity;
     int offset;			/* Dash offset */
@@ -230,6 +235,7 @@ typedef struct Tk_PathStyle {
     struct TkPathStyleInst *instancePtr;
 				/* Pointer to first in list of instances
 				 * derived from this style name. */
+    int fillOverStroke;
 } Tk_PathStyle;
 
 /*
@@ -327,6 +333,9 @@ MODULE_SCOPE void   TkPathRestoreState(TkPathContext ctx);
 /*
  * Utilities for creating and deleting Tk_PathStyles.
  */
+/*ORLOV*/
+MODULE_SCOPE void   TkPathFillOverStroke(TkPathContext ctx, Tk_PathStyle *stylePtr);
+MODULE_SCOPE void   TkPathStrokeGradient(TkPathContext ctx, Tk_PathStyle *stylePtr, PathRect *bboxPtr);
 
 MODULE_SCOPE void   TkPathInitStyle(Tk_PathStyle *style);
 MODULE_SCOPE void   TkPathDeleteStyle(Tk_PathStyle *style);

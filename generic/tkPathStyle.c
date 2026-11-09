@@ -379,6 +379,12 @@ PATH_OPTION_STRING_TABLES_STROKE
  * @@@ TODO: BAD I had to duplicate this record here and in tkPathStyle.h.
  *     Else I get problems with offsetof and records.
  */
+/* ORLOV
+    {TK_OPTION_COLOR, "-stroke", NULL, NULL,
+        "black", -1, offsetof(Tk_PathStyle, strokeColor), TK_OPTION_NULL_OK, 0,
+	PATH_STYLE_OPTION_STROKE},
+*/
+
 
 static Tk_OptionSpec styleOptionSpecs[] = {
     {TK_OPTION_STRING, "-fill", NULL, NULL,
@@ -393,9 +399,9 @@ static Tk_OptionSpec styleOptionSpecs[] = {
     {TK_OPTION_CUSTOM, "-matrix", NULL, NULL,
 	NULL, -1, offsetof(Tk_PathStyle, matrixPtr),
 	TK_OPTION_NULL_OK, (ClientData) &matrixCO, PATH_STYLE_OPTION_MATRIX},
-    {TK_OPTION_COLOR, "-stroke", NULL, NULL,
-        "black", -1, offsetof(Tk_PathStyle, strokeColor), TK_OPTION_NULL_OK, 0,
-	PATH_STYLE_OPTION_STROKE},
+    {TK_OPTION_STRING, "-stroke", NULL, NULL,
+        "", offsetof(Tk_PathStyle, strokeObj), -1,
+        TK_OPTION_NULL_OK, 0, PATH_STYLE_OPTION_STROKE},
     {TK_OPTION_CUSTOM, "-strokedasharray", NULL, NULL,
 	NULL, -1, offsetof(Tk_PathStyle, dashPtr),
 	TK_OPTION_NULL_OK, (ClientData) &dashCO, PATH_STYLE_OPTION_STROKE_DASHARRAY},
@@ -417,6 +423,9 @@ static Tk_OptionSpec styleOptionSpecs[] = {
     {TK_OPTION_DOUBLE, "-strokewidth", NULL, NULL,
         "1.0", -1, offsetof(Tk_PathStyle, strokeWidth), 0, 0,
 	PATH_STYLE_OPTION_STROKE_WIDTH},
+    {TK_OPTION_BOOLEAN, "-filloverstroke", NULL, NULL,
+        "0", -1, offsetof(Tk_PathStyle, fillOverStroke), 0, 0,
+	PATH_STYLE_OPTION_FILLOVERSTROKE},
 
     /* @@@ TODO: When this comes into canvas code we should add a -tags option here??? */
 
@@ -468,6 +477,12 @@ StyleGradientProc(ClientData clientData, int flags)
 	    stylePtr->fill = NULL;
 	    Tcl_DecrRefCount(stylePtr->fillObj);
 	    stylePtr->fillObj = NULL;
+/*ORLOV*/
+	    TkPathFreePathColor(stylePtr->strokeColor);
+	    stylePtr->strokeColor = NULL;
+	    Tcl_DecrRefCount(stylePtr->strokeObj);
+	    stylePtr->strokeObj = NULL;
+
 	}
 	TkPathStyleChanged(stylePtr, flags);
     }
@@ -579,6 +594,23 @@ PathStyleConfigure(Tcl_Interp *interp, Tk_Window tkwin, int objc, Tcl_Obj * cons
 	    TkPathFreePathColor(stylePtr->fill);
 	}
 	stylePtr->fill = fillPtr;
+/*ORLOV*/
+	if (stylePtr->strokeObj != NULL) {
+	    fillPtr = TkPathGetPathColor(interp, tkwin, stylePtr->strokeObj,
+		    gradTablePtr, StyleGradientProc, (ClientData) stylePtr);
+	    if (fillPtr == NULL) {
+		return TCL_ERROR;
+	    }
+	} else {
+	    fillPtr = NULL;
+	}
+	/* Free any old and store the new. */
+	if (stylePtr->strokeColor != NULL) {
+	    TkPathFreePathColor(stylePtr->strokeColor);
+	}
+	stylePtr->strokeColor = fillPtr;
+
+
 	/*
 	 * Let mask be the cumalative options set.
 	 */
@@ -638,6 +670,19 @@ PathStyleCreate(Tcl_Interp *interp, Tk_Window tkwin, int objc,
 	fillPtr = NULL;
     }
     stylePtr->fill = fillPtr;
+/*ORLOV*/
+    if (stylePtr->strokeObj != NULL) {
+	fillPtr = TkPathGetPathColor(interp, tkwin, stylePtr->strokeObj,
+		gradTablePtr, StyleGradientProc, (ClientData) stylePtr);
+	if (fillPtr == NULL) {
+	    Tk_FreeConfigOptions((char *)stylePtr, stylePtr->optionTable, NULL);
+	    ckfree((char *)stylePtr);
+	    return TCL_ERROR;
+	}
+    } else {
+	fillPtr = NULL;
+    }
+    stylePtr->strokeColor = fillPtr;
 
     /*
      * Let mask be the cumalative options set.
@@ -1098,6 +1143,9 @@ TkPathStyleMergeStyles(
         if (mask & PATH_STYLE_OPTION_STROKE_WIDTH) {
             dstStyle->strokeWidth = srcStyle->strokeWidth;
         }
+        if (mask & PATH_STYLE_OPTION_FILLOVERSTROKE) {
+            dstStyle->fillOverStroke = srcStyle->fillOverStroke;
+        }
     }
     dstStyle->mask |= mask;
 }
@@ -1125,9 +1173,11 @@ TkPathInitStyle(Tk_PathStyle *style)
     memset(style, '\0', sizeof(Tk_PathStyle));
 
     style->mask = 0;
+    style->strokeObj = NULL;
     style->strokeColor = NULL;
     style->strokeWidth = 1.0;
     style->strokeOpacity = 1.0;
+    style->fillOverStroke = 0;
     style->offset = 0;
     style->dashPtr = NULL;
     style->capStyle = CapButt;

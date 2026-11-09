@@ -102,6 +102,9 @@ class PathC {
     int                 mCointainerTop;
 
     static void PathInitPen(Tk_PathStyle *style, Pen *penPtr);
+//ORLOV
+    void StrokeGradient(Tk_PathStyle *style);
+    void FillGradient(Tk_PathStyle *style);
 };
 
 typedef struct PathSurfaceGDIpRecord {
@@ -502,6 +505,224 @@ skip:
     }
     return (WCHAR *) Tcl_DStringValue(ds);
 }
+//ORLOV
+inline void
+PathC::StrokeGradient(Tk_PathStyle *style)
+{
+    int hasStroke = (GetColorFromPathColor(style->strokeColor) != NULL);
+    int hasStrokeGr = (GetGradientMasterFromPathColor(style->strokeColor) != NULL);
+    double strokeOpacity = style->strokeOpacity;
+    /* Trim strokeOpacity to [0,1] */
+    if (strokeOpacity < 0.0) {
+        strokeOpacity = 0.0;
+    }
+    if (strokeOpacity > 1.0) {
+        strokeOpacity = 1.0;
+    }
+    if (hasStroke) {
+	Pen pen(MakeGDIPlusColor(style->strokeColor->color, strokeOpacity), (float) style->strokeWidth);
+	PathInitPen(style, &pen);
+	mGraphics->DrawPath(&pen, mPath);
+    } else if (hasStrokeGr) {
+	int	i;
+	int     nstops;
+	GradientStop         *stop;
+	GradientStopArray    *stopArrPtr;
+	TkPathGradientMaster *gradientPtr = GetGradientMasterFromPathColor(style->strokeColor);
+	stopArrPtr = gradientPtr->linearFill.stopArrPtr;
+	nstops = stopArrPtr->nstops;
+
+	if (gradientPtr->type == kPathGradientTypeLinear) {
+	    float	x, y, width, height;
+	    PathRect	*tPtr;
+	    PointF	p1, p2, pstart, pend;
+	    RectF bounds;
+	    mPath->GetBounds(&bounds);
+	    tPtr = gradientPtr->linearFill.transitionPtr;
+//	    GraphicsContainer container = mGraphics->BeginContainer();
+
+	    if (gradientPtr->linearFill.units == kPathGradientUnitsBoundingBox) {
+		p1.X = bounds.X + float(tPtr->x1) * bounds.Width;
+		p1.Y = bounds.Y + float(tPtr->y1) * bounds.Height;
+		p2.X = bounds.X + float(tPtr->x2) * bounds.Width;
+		p2.Y = bounds.Y + float(tPtr->y2) * bounds.Height;
+	    } else {
+		p1.X = float(tPtr->x1);
+		p1.Y = float(tPtr->y1);
+		p2.X = float(tPtr->x2);
+	        p2.Y = float(tPtr->y2);
+	    }
+	    stop = stopArrPtr->stops[0];
+	    Color col1(MakeGDIPlusColor(stop->color, stop->opacity * strokeOpacity));
+	    stop = stopArrPtr->stops[nstops-1];
+	    Color col2(MakeGDIPlusColor(stop->color, stop->opacity * strokeOpacity));
+    	    LinearGradientBrush brush(p1, p2, col1, col2);
+    	    Color *col = new Color[nstops];
+    	    REAL *pos = new REAL[nstops];
+    	    for (i = 0; i < nstops; i++) {
+        	stop = stopArrPtr->stops[i];
+        	col[i] = MakeGDIPlusColor(stop->color, stop->opacity * strokeOpacity);
+        	pos[i] = REAL(stop->offset);
+    	    }
+    	    brush.SetInterpolationColors(col, pos, nstops);
+    	    delete [] col;
+    	    delete [] pos;
+	    Pen pen(&brush, (float) style->strokeWidth);
+	    PathInitPen(style, &pen);
+	    mGraphics->DrawPath(&pen, mPath);
+	} else if (gradientPtr->type == kPathGradientTypeRadial) {
+	    RadialTransition     *tPtr;
+	    PointF               center, radius, focal;
+	    RectF bounds;
+	    mPath->GetBounds(&bounds);
+	    tPtr = gradientPtr->radialFill.radialPtr;
+
+	    if (gradientPtr->radialFill.units == kPathGradientUnitsBoundingBox) {
+		center.X = bounds.X + float(tPtr->centerX) * bounds.Width;
+		center.Y = bounds.Y + float(tPtr->centerY) * bounds.Height;
+	        radius.X = float(tPtr->radius) * bounds.Width;
+		radius.Y = float(tPtr->radius) * bounds.Height;
+		focal.X = bounds.X + float(tPtr->focalX) * bounds.Width;
+	        focal.Y = bounds.Y + float(tPtr->focalY) * bounds.Height;
+	    } else {
+		center.X = float(tPtr->centerX);
+	        center.Y = float(tPtr->centerY);
+	        radius.X = float(tPtr->radius);
+	        radius.Y = float(tPtr->radius);
+	        focal.X = float(tPtr->focalX);
+	        focal.Y = float(tPtr->focalY);
+	    }
+//	    mGraphics->SetClip(mPath);
+	    stop = stopArrPtr->stops[nstops-1];
+
+	    GraphicsPath path;
+	    path.AddEllipse(center.X - radius.X, center.Y - radius.Y,
+                    2*radius.X, 2*radius.Y);
+	    PathGradientBrush brush(&path);
+
+	    stop = stopArrPtr->stops[0];
+	    brush.SetCenterColor(MakeGDIPlusColor(stop->color,
+                                          stop->opacity * strokeOpacity));
+	    brush.SetCenterPoint(focal);
+	    int count = 1;
+	    stop = stopArrPtr->stops[nstops-1];
+	    Color color = MakeGDIPlusColor(stop->color,
+                                   stop->opacity * strokeOpacity);
+	    brush.SetSurroundColors(&color, &count);
+
+	    // gdi+ counts them from the border and not from the center. 
+	    Color *col = new Color[nstops];
+	    REAL *pos = new REAL[nstops];
+	    for (i = nstops-1; i >= 0; i--) {
+    		stop = stopArrPtr->stops[i];
+    		col[i] = MakeGDIPlusColor(stop->color, stop->opacity * strokeOpacity);
+    		pos[i] = REAL(1.0 - stop->offset);
+	    }
+	    brush.SetInterpolationColors(col, pos, nstops);
+	    delete [] col;
+	    delete [] pos;
+	    Pen pen(&brush, (float) style->strokeWidth);
+	    PathInitPen(style, &pen);
+	    mGraphics->DrawPath(&pen, mPath);
+	}
+    }
+}
+inline void
+PathC::FillGradient(Tk_PathStyle *style)
+{
+    int hasFill = (GetColorFromPathColor(style->fill) != NULL);
+    int hasFillGr = (GetGradientMasterFromPathColor(style->fill) != NULL);
+    double fillOpacity = style->fillOpacity;
+    /* Trim fillOpacity to [0,1] */
+    if (fillOpacity < 0.0) {
+        fillOpacity = 0.0;
+    }
+    if (fillOpacity > 1.0) {
+        fillOpacity = 1.0;
+    }
+    if (hasFill) {
+        SolidBrush brush(
+    	    MakeGDIPlusColor(GetColorFromPathColor(style->fill),
+                                     style->fillOpacity));
+        mGraphics->FillPath(&brush, mPath);
+    } else if (hasFillGr) {
+	int	i;
+	int     nstops;
+	GradientStop         *stop;
+	GradientStopArray    *stopArrPtr;
+	TkPathGradientMaster *gradientPtr = GetGradientMasterFromPathColor(style->fill);
+	stopArrPtr = gradientPtr->linearFill.stopArrPtr;
+	nstops = stopArrPtr->nstops;
+
+	if (gradientPtr->type == kPathGradientTypeLinear) {
+	    float	x, y, width, height;
+	    PathRect	*tPtr;
+	    PointF	p1, p2, pstart, pend;
+	    tPtr = gradientPtr->linearFill.transitionPtr;
+
+    	    p1.X = float(tPtr->x1);
+    	    p1.Y = float(tPtr->y1);
+	    p2.X = float(tPtr->x2);
+    	    p2.Y = float(tPtr->y2);
+	    stop = stopArrPtr->stops[0];
+	    Color col1(MakeGDIPlusColor(stop->color, stop->opacity * fillOpacity));
+	    stop = stopArrPtr->stops[nstops-1];
+	    Color col2(MakeGDIPlusColor(stop->color, stop->opacity * fillOpacity));
+    	    LinearGradientBrush brush(p1, p2, col1, col2);
+    	    Color *col = new Color[nstops];
+    	    REAL *pos = new REAL[nstops];
+    	    for (i = 0; i < nstops; i++) {
+        	stop = stopArrPtr->stops[i];
+        	col[i] = MakeGDIPlusColor(stop->color, stop->opacity * fillOpacity);
+        	pos[i] = REAL(stop->offset);
+    	    }
+    	    brush.SetInterpolationColors(col, pos, nstops);
+    	    mGraphics->FillPath(&brush, mPath);
+    	    delete [] col;
+    	    delete [] pos;
+	} else if (gradientPtr->type == kPathGradientTypeRadial) {
+	    RadialTransition     *tPtr;
+	    PointF               center, radius, focal;
+	    tPtr = gradientPtr->radialFill.radialPtr;
+    	    center.X = float(tPtr->centerX);
+    	    center.Y = float(tPtr->centerY);
+    	    radius.X = float(tPtr->radius);
+    	    radius.Y = float(tPtr->radius);
+    	    focal.X = float(tPtr->focalX);
+    	    focal.Y = float(tPtr->focalY);
+	    mGraphics->SetClip(mPath);
+	    stop = stopArrPtr->stops[nstops-1];
+
+	    GraphicsPath path;
+	    path.AddEllipse(center.X - radius.X, center.Y - radius.Y,
+                    2*radius.X, 2*radius.Y);
+	    PathGradientBrush brush(&path);
+
+	    stop = stopArrPtr->stops[0];
+	    brush.SetCenterColor(MakeGDIPlusColor(stop->color,
+                                          stop->opacity * fillOpacity));
+	    brush.SetCenterPoint(focal);
+	    int count = 1;
+	    stop = stopArrPtr->stops[nstops-1];
+	    Color color = MakeGDIPlusColor(stop->color,
+                                   stop->opacity * fillOpacity);
+	    brush.SetSurroundColors(&color, &count);
+
+	    // gdi+ counts them from the border and not from the center. 
+	    Color *col = new Color[nstops];
+	    REAL *pos = new REAL[nstops];
+	    for (i = nstops-1; i >= 0; i--) {
+    		stop = stopArrPtr->stops[i];
+    		col[i] = MakeGDIPlusColor(stop->color, stop->opacity * fillOpacity);
+    		pos[i] = REAL(1.0 - stop->offset);
+	    }
+	    brush.SetInterpolationColors(col, pos, nstops);
+    	    mGraphics->FillPath(&brush, mPath);
+	    delete [] col;
+	    delete [] pos;
+	}
+    }
+}
 
 inline void
 PathC::DrawString(Tk_PathStyle *style, Tk_PathTextStyle *textStylePtr,
@@ -510,6 +731,12 @@ PathC::DrawString(Tk_PathStyle *style, Tk_PathTextStyle *textStylePtr,
     Tcl_DString ds, dsFont;
     WCHAR *wcPtr, *endPtr;
     float ascent, spacing;
+/*ORLOV*/
+    int hasStroke = (GetColorFromPathColor(style->strokeColor) != NULL);
+    int hasFill = (GetColorFromPathColor(style->fill) != NULL);
+    int hasStrokeGr = (GetGradientMasterFromPathColor(style->strokeColor) != NULL);
+    int hasFillGr = (GetGradientMasterFromPathColor(style->fill) != NULL);
+    fillOverStroke = style->fillOverStroke;
 
     Tcl_DStringInit(&dsFont);
     FontFamily fontFamily((const WCHAR *)
@@ -550,33 +777,51 @@ PathC::DrawString(Tk_PathStyle *style, Tk_PathTextStyle *textStylePtr,
          * design units and pixels.
          */
         PointF point(x, y - ascent);
-        if (!fillOverStroke && GetColorFromPathColor(style->fill) != NULL &&
-            style->strokeColor == NULL) {
-            SolidBrush brush(
-                MakeGDIPlusColor(GetColorFromPathColor(style->fill),
+/*ORLOV*/
+	if (!fillOverStroke && (hasFill || hasFillGr) && (hasStroke || hasStrokeGr)) {
+	    if (hasFill && hasStroke) {
+        	SolidBrush brush(
+            	    MakeGDIPlusColor(GetColorFromPathColor(style->fill),
                                  style->fillOpacity));
-            mGraphics->DrawString(wcPtr, brkPtr - wcPtr, &font, point,
+        	mGraphics->DrawString(wcPtr, brkPtr - wcPtr, &font, point,
                     StringFormat::GenericTypographic(), &brush);
+	    } else {
+		FillGradient(style);
+		StrokeGradient(style);
+	    }
         }
-        if (style->strokeColor != NULL) {
+        if (hasStroke || hasStrokeGr) {
             mPath->AddString(wcPtr, brkPtr - wcPtr, &fontFamily, fontStyle,
                     (float) textStylePtr->fontSize, point,
                     StringFormat::GenericTypographic());
-            if (!fillOverStroke && GetColorFromPathColor(style->fill) != NULL) {
-                SolidBrush brush(
-                    MakeGDIPlusColor(GetColorFromPathColor(style->fill),
+            if (!fillOverStroke && (hasFill || hasFillGr) ) {
+		if (hasFill) {
+            	    SolidBrush brush(
+                	MakeGDIPlusColor(GetColorFromPathColor(style->fill),
                                      style->fillOpacity));
-                mGraphics->FillPath(&brush, mPath);
+            	    mGraphics->FillPath(&brush, mPath);
+		} else {
+	            FillGradient(style); 
+		}
             }
-            Pen pen(MakeGDIPlusColor(style->strokeColor, style->strokeOpacity),
+	    if (hasStroke) {
+        	Pen pen(MakeGDIPlusColor(style->strokeColor->color, style->strokeOpacity),
                                      (float) style->strokeWidth);
-            PathInitPen(style, &pen);
-            mGraphics->DrawPath(&pen, mPath);
-            if (fillOverStroke && GetColorFromPathColor(style->fill) != NULL) {
-                SolidBrush brush(
-                    MakeGDIPlusColor(GetColorFromPathColor(style->fill),
+        	PathInitPen(style, &pen);
+        	mGraphics->DrawPath(&pen, mPath);
+	    } else {
+        	StrokeGradient(style); 
+	    }
+
+            if (fillOverStroke && (hasFill || hasFillGr)) {
+		if (hasFill) {
+            	    SolidBrush brush(
+                	MakeGDIPlusColor(GetColorFromPathColor(style->fill),
                                      style->fillOpacity));
-                mGraphics->FillPath(&brush, mPath);
+            	    mGraphics->FillPath(&brush, mPath);
+		} else {
+        	    FillGradient(style); 
+		}
             }
         }
         y += spacing;
@@ -596,11 +841,107 @@ PathC::CloseFigure()
 inline void
 PathC::Stroke(Tk_PathStyle *style)
 {
-    Pen pen(MakeGDIPlusColor(style->strokeColor,
-                             style->strokeOpacity),
-            (float) style->strokeWidth);
-    PathInitPen(style, &pen);
-    mGraphics->DrawPath(&pen, mPath);
+    int hasStroke = (GetColorFromPathColor(style->strokeColor) != NULL);
+    int hasStrokeGr = (GetGradientMasterFromPathColor(style->strokeColor) != NULL);
+    int strokeOpacity = style->strokeOpacity;
+    /* Trim strokeOpacity to [0,1] */
+    if (strokeOpacity < 0.0) {
+        strokeOpacity = 0.0;
+    }
+    if (strokeOpacity > 1.0) {
+        strokeOpacity = 1.0;
+    }
+    if (hasStroke) {
+	Pen pen(MakeGDIPlusColor(style->strokeColor->color, strokeOpacity), (float) style->strokeWidth);
+	PathInitPen(style, &pen);
+	mGraphics->DrawPath(&pen, mPath);
+    } else if (hasStrokeGr) {
+	int	i;
+	int     nstops;
+	GradientStop         *stop;
+	GradientStopArray    *stopArrPtr;
+	TkPathGradientMaster *gradientPtr = GetGradientMasterFromPathColor(style->strokeColor);
+	stopArrPtr = gradientPtr->linearFill.stopArrPtr;
+	nstops = stopArrPtr->nstops;
+
+	if (gradientPtr->type == kPathGradientTypeLinear) {
+	    float	x, y, width, height;
+	    PathRect	*tPtr;
+	    PointF	p1, p2, pstart, pend;
+	    tPtr = gradientPtr->linearFill.transitionPtr;
+	    GraphicsContainer container = mGraphics->BeginContainer();
+
+    	    p1.X = float(tPtr->x1);
+    	    p1.Y = float(tPtr->y1);
+	    p2.X = float(tPtr->x2);
+    	    p2.Y = float(tPtr->y2);
+	    stop = stopArrPtr->stops[0];
+	    Color col1(MakeGDIPlusColor(stop->color, stop->opacity * strokeOpacity));
+	    stop = stopArrPtr->stops[nstops-1];
+	    Color col2(MakeGDIPlusColor(stop->color, stop->opacity * strokeOpacity));
+    	    LinearGradientBrush brush(p1, p2, col1, col2);
+    	    Color *col = new Color[nstops];
+    	    REAL *pos = new REAL[nstops];
+    	    for (i = 0; i < nstops; i++) {
+        	stop = stopArrPtr->stops[i];
+        	col[i] = MakeGDIPlusColor(stop->color, stop->opacity * strokeOpacity);
+        	pos[i] = REAL(stop->offset);
+    	    }
+    	    brush.SetInterpolationColors(col, pos, nstops);
+    	    delete [] col;
+    	    delete [] pos;
+	    Pen pen(&brush, (float) style->strokeWidth);
+	    PathInitPen(style, &pen);
+	    mGraphics->DrawPath(&pen, mPath);
+	    mGraphics->EndContainer(container);
+	} else if (gradientPtr->type == kPathGradientTypeRadial) {
+	    RadialTransition     *tPtr;
+	    PointF               center, radius, focal;
+	    tPtr = gradientPtr->radialFill.radialPtr;
+    	    center.X = float(tPtr->centerX);
+    	    center.Y = float(tPtr->centerY);
+    	    radius.X = float(tPtr->radius);
+    	    radius.Y = float(tPtr->radius);
+    	    focal.X = float(tPtr->focalX);
+    	    focal.Y = float(tPtr->focalY);
+	    GraphicsContainer container = mGraphics->BeginContainer();
+	    mGraphics->SetClip(mPath);
+	    // @@@ Extend the transition instead like we did for liner gradients above.
+	    stop = stopArrPtr->stops[nstops-1];
+
+	    GraphicsPath path;
+	    path.AddEllipse(center.X - radius.X, center.Y - radius.Y,
+                    2*radius.X, 2*radius.Y);
+	    PathGradientBrush brush(&path);
+
+	    stop = stopArrPtr->stops[0];
+	    brush.SetCenterColor(MakeGDIPlusColor(stop->color,
+                                          stop->opacity * strokeOpacity));
+	    brush.SetCenterPoint(focal);
+	    int count = 1;
+	    stop = stopArrPtr->stops[nstops-1];
+	    Color color = MakeGDIPlusColor(stop->color,
+                                   stop->opacity * strokeOpacity);
+	    brush.SetSurroundColors(&color, &count);
+
+	    // gdi+ counts them from the border and not from the center. 
+	    Color *col = new Color[nstops];
+	    REAL *pos = new REAL[nstops];
+	    for (i = nstops-1; i >= 0; i--) {
+    		stop = stopArrPtr->stops[i];
+    		col[i] = MakeGDIPlusColor(stop->color, stop->opacity * strokeOpacity);
+    		pos[i] = REAL(1.0 - stop->offset);
+	    }
+	    brush.SetInterpolationColors(col, pos, nstops);
+	    delete [] col;
+	    delete [] pos;
+	    Pen pen(&brush, (float) style->strokeWidth);
+	    PathInitPen(style, &pen);
+	    mGraphics->DrawPath(&pen, mPath);
+	    mGraphics->EndContainer(container);
+	}
+
+    }
 }
 
 inline void
@@ -615,7 +956,7 @@ PathC::Fill(Tk_PathStyle *style)
 inline void
 PathC::FillAndStroke(Tk_PathStyle *style)
 {
-    Pen pen(MakeGDIPlusColor(style->strokeColor,
+    Pen pen(MakeGDIPlusColor(style->strokeColor->color,
                              style->strokeOpacity),
             (float) style->strokeWidth);
     PathInitPen(style, &pen);
@@ -1426,6 +1767,14 @@ TkPathFillAndStroke(TkPathContext ctx, Tk_PathStyle *style)
     TkPathContext_ *context = (TkPathContext_ *) ctx;
     context->c->FillAndStroke(style);
 }
+/*====================ORLOV==================*/
+void 
+TkPathFillOverStroke(TkPathContext ctx, Tk_PathStyle *style) 
+{
+   TkPathStroke(ctx, style);
+   TkPathFill(ctx, style);
+}
+/*=======================================*/
 
 int
 TkPathGetCurrentPosition(TkPathContext ctx, PathPoint *ptPtr)

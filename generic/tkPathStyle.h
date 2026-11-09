@@ -149,8 +149,8 @@ MODULE_SCOPE void	TkPathStyleChanged(Tk_PathStyle *masterPtr, int flags);
 	TK_OPTION_NULL_OK, (ClientData) &matrixCO, PATH_STYLE_OPTION_MATRIX}
 
 #define PATH_OPTION_SPEC_STYLE_STROKE(typeName, theColor)		\
-    {TK_OPTION_COLOR, "-stroke", NULL, NULL,				\
-        theColor, -1, offsetof(typeName, style.strokeColor),		\
+    {TK_OPTION_STRING, "-stroke", NULL, NULL,				\
+        theColor, offsetof(typeName, style.strokeObj), -1,		\
         TK_OPTION_NULL_OK, 0, PATH_STYLE_OPTION_STROKE},		\
     {TK_OPTION_CUSTOM, "-strokedasharray", NULL, NULL,			\
 	NULL, -1, offsetof(typeName, style.dashPtr),			\
@@ -173,7 +173,10 @@ MODULE_SCOPE void	TkPathStyleChanged(Tk_PathStyle *masterPtr, int flags);
         PATH_STYLE_OPTION_STROKE_OPACITY},				\
     {TK_OPTION_DOUBLE, "-strokewidth", NULL, NULL,			\
         "1.0", -1, offsetof(typeName, style.strokeWidth), 0, 0,    	\
-        PATH_STYLE_OPTION_STROKE_WIDTH}
+        PATH_STYLE_OPTION_STROKE_WIDTH},				\
+    {TK_OPTION_BOOLEAN, "-filloverstroke", NULL, NULL,			\
+        "0", -1, offsetof(typeName, style.fillOverStroke), 0, 0,	\
+	PATH_STYLE_OPTION_FILLOVERSTROKE}				
 
 #define PATH_OPTION_SPEC_END						\
 	{TK_OPTION_END, NULL, NULL, NULL,				\
