@@ -17,12 +17,14 @@ wm geometry $t 900x550
 tkp::canvas $t.c -bg yellow
 pack $t.c -fill both -expand 1 -padx 1m -pady 1m
 
-$t.c gradient create linear -lineartransition [list 900 0 0 90] -stops {{0 red 1} {1 gray80 1}}
-$t.c gradient create linear -lineartransition [list 90 0 0 90] -stops {{0 cyan 1} {1 chocolate 1}}
+set unit "userspace"
 
-$t.c gradient create linear -lineartransition [list 40 40 300 300] -stops {{0 red 1} {0.5 gray80 1} {1 cyan 1}}
-set myGradient [$t.c gradient create linear -stops {{0 "gray80"} {1 "blue"}}]
-set rgr [$t.c gradient create radial -stops {{0 cyan 1} {0.5 gray80 1} {0.75 red 1} {1 snow 1}}]
+$t.c gradient create linear -units $unit -lineartransition [list 900 0 0 90] -stops {{0 red 1} {1 gray80 1}}
+$t.c gradient create linear -units $unit -lineartransition [list 90 0 0 90] -stops {{0 cyan 1} {1 chocolate 1}}
+
+$t.c gradient create linear -units $unit -lineartransition [list 40 40 300 300] -stops {{0 red 1} {0.5 gray80 1} {1 cyan 1}}
+set myGradient [$t.c gradient create linear -units $unit -stops {{0 "gray80"} {1 "blue"}}]
+set rgr [$t.c gradient create radial -units bbox -stops {{0 cyan 1} {0.5 gray80 1} {0.75 red 1} {1 snow 1}}]
 $t.c create prect 80 240 280 340 -fill $rgr -stroke gradient1 -strokewidth 10 -rx 6
 
 $t.c create pline 20 40 280 300 -strokewidth 20 -stroke gradient2
