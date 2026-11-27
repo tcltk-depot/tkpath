@@ -830,7 +830,8 @@ PtextToPdf(Tcl_Interp *interp, Tk_PathCanvas canvas, Tk_PathItem *itemPtr,
     if (ptextPtr->fillOverStroke && hasStroke &&
 	(style.fill != NULL) && (style.fill->color != NULL)) {
 	/* first pass w/o fill */
-	TkPathPdfColor(ret, style.strokeColor, "RG");
+//	TkPathPdfColor(ret, style.strokeColor, "RG");
+	TkPathPdfColor(ret, style.strokeColor->color, "RG");
 	Tcl_AppendToObj(ret, "1 Tr\n", 5);
 	TkPathPdfNumber(ret, 3, style.strokeWidth, " w\n");
 	result = drawptext(interp, ptextPtr, ret, cmdl);
@@ -852,7 +853,8 @@ PtextToPdf(Tcl_Interp *interp, Tk_PathCanvas canvas, Tk_PathItem *itemPtr,
     } else if ((style.fill != NULL) && (style.fill->color != NULL)) {
 	TkPathPdfColor(ret, style.fill->color, "rg");
 	if (hasStroke) {
-	    TkPathPdfColor(ret, style.strokeColor, "RG");
+//	    TkPathPdfColor(ret, style.strokeColor, "RG");
+	    TkPathPdfColor(ret, style.strokeColor->color, "RG");
 	    Tcl_AppendToObj(ret, "2 Tr\n", 5);
 	    TkPathPdfNumber(ret, 3, style.strokeWidth, " w\n");
 	} else {
@@ -860,7 +862,8 @@ PtextToPdf(Tcl_Interp *interp, Tk_PathCanvas canvas, Tk_PathItem *itemPtr,
 	}
 	result = drawptext(interp, ptextPtr, ret, cmdl);
     } else if (hasStroke) {
-	TkPathPdfColor(ret, style.strokeColor, "RG");
+//	TkPathPdfColor(ret, style.strokeColor, "RG");
+	TkPathPdfColor(ret, style.strokeColor->color, "RG");
 	Tcl_AppendToObj(ret, "1 Tr\n", 5);
 	TkPathPdfNumber(ret, 3, style.strokeWidth, " w\n");
 	result = drawptext(interp, ptextPtr, ret, cmdl);

@@ -2705,6 +2705,28 @@ TkPathCanvasItemExConfigure(Tcl_Interp *interp, Tk_PathCanvas canvas, Tk_PathIte
 	}
 	stylePtr->fill = fillPtr;
     }
+/*ORLOV*/
+    if (mask & PATH_STYLE_OPTION_STROKE) {
+	TkPathColor *fillPtr = NULL;
+
+	if (stylePtr->strokeObj != NULL) {
+	    fillPtr = TkPathGetPathColor(interp, tkwin, stylePtr->strokeObj,
+		    TkPathCanvasGradientTable(canvas), PathGradientChangedProc,
+		    (ClientData) itemExPtr);
+	    if (fillPtr == NULL) {
+		return TCL_ERROR;
+	    }
+	} else {
+	    fillPtr = NULL;
+	}
+	/* Free any old and store the new. */
+	if (stylePtr->strokeColor != NULL) {
+	    TkPathFreePathColor(stylePtr->strokeColor);
+	}
+	stylePtr->strokeColor = fillPtr;
+    }
+
+
     return TCL_OK;
 }
 
@@ -2721,6 +2743,12 @@ PathGradientChangedProc(ClientData clientData, int flags)
 	    stylePtr->fill = NULL;
 	    Tcl_DecrRefCount(stylePtr->fillObj);
 	    stylePtr->fillObj = NULL;
+/*ORLOV*/
+	    TkPathFreePathColor(stylePtr->strokeColor);
+	    stylePtr->strokeColor = NULL;
+	    Tcl_DecrRefCount(stylePtr->strokeObj);
+	    stylePtr->strokeObj = NULL;
+
 	}
 	if (itemPtr->typePtr == &tkpGroupType) {
 	    GroupItemConfigured(itemExPtr->canvas, itemPtr,

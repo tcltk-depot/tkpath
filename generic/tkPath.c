@@ -1219,8 +1219,12 @@ TkPathPdfArrow(
 	arrowStyle.matrixPtr = NULL;
 	if (arrow->arrowFillRatio > 0.0 && arrow->arrowLength != 0.0) {
 	    arrowStyle.strokeWidth = 0.0;
-	    fc.color = arrowStyle.strokeColor;
-	    fc.gradientInstPtr = NULL;
+/*ORLOV*/
+//	    fc.color = arrowStyle.strokeColor;
+//	    fc.gradientInstPtr = NULL;
+	    fc.color = arrowStyle.strokeColor->color;
+	    fc.gradientInstPtr = arrowStyle.strokeColor->gradientInstPtr;
+
 	    arrowStyle.fill = &fc;
 	    arrowStyle.fillOpacity = arrowStyle.strokeOpacity;
 	} else {
@@ -1411,8 +1415,11 @@ TkPathPdf(
 	    }
 	}
 	TkPathPdfNumber(ret, 3, stylePtr->strokeWidth, " w\n");
-	if (stylePtr->strokeColor) {
-	    TkPathPdfColor(ret, stylePtr->strokeColor, "RG");
+/*ORLOV*/
+//	if (stylePtr->strokeColor) {
+//	    TkPathPdfColor(ret, stylePtr->strokeColor, "RG");
+	if (stylePtr->strokeColor && stylePtr->strokeColor->color) {
+	    TkPathPdfColor(ret, stylePtr->strokeColor->color, "RG");
 	    s = 1;
 	}
 	if (stylePtr->fill && stylePtr->fill->color) {

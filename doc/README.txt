@@ -151,9 +151,10 @@ to float (double).
                                         or the name of a gradient
         -fillopacity float (0,1)
         -fillrule nonzero|evenodd
+        -filloverstroke BOOLEAN         fill drawn over the stroke; default value is false
 
     Stroke (strokeOptions):
-        -stroke color
+        -stroke color|gradientToken
         -strokedasharray dashArray
         -strokedashoffset integer
         -strokelinecap butt|round|square

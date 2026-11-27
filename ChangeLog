@@ -1,3 +1,15 @@
+2026-11-02  Vladimir Orlov <vorlov@lissi-crypto.ru>
+
+	* linux,windows: support for the -filloverstroke option has been added for prect, circle,
+	ellipse, path objects. The -filloverstroke option has been included fillOptions list
+	* linux,windows: support for gradient fills for strokes has also been added 
+	(-stroke color|gradientToken)
+
+2026-08-28  Vladimir Orlov <vorlov@lissi-crypto.ru>
+
+	* tkPathSurface.cpp: add function tkp::loupe:
+	* doc: add tkp::loupe
+
 2014-10-22  Andras Varga <andras@omnetpp.org>
 
 	* demos: editing; try loading tkpng in case Tk needs it to load PNGs
