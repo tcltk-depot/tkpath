@@ -533,7 +533,6 @@ PathC::StrokeGradient(Tk_PathStyle *style)
 	nstops = stopArrPtr->nstops;
 
 	if (gradientPtr->type == kPathGradientTypeLinear) {
-	    float	x, y, width, height;
 	    PathRect	*tPtr;
 	    PointF	p1, p2, pstart, pend;
 	    RectF bounds;
@@ -655,7 +654,6 @@ PathC::FillGradient(Tk_PathStyle *style)
 	nstops = stopArrPtr->nstops;
 
 	if (gradientPtr->type == kPathGradientTypeLinear) {
-	    float	x, y, width, height;
 	    PathRect	*tPtr;
 	    PointF	p1, p2, pstart, pend;
 	    tPtr = gradientPtr->linearFill.transitionPtr;
@@ -865,7 +863,6 @@ PathC::Stroke(Tk_PathStyle *style)
 	nstops = stopArrPtr->nstops;
 
 	if (gradientPtr->type == kPathGradientTypeLinear) {
-	    float	x, y, width, height;
 	    PathRect	*tPtr;
 	    PointF	p1, p2, pstart, pend;
 	    tPtr = gradientPtr->linearFill.transitionPtr;
